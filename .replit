@@ -1,0 +1,24 @@
+entrypoint = "main.py"
+modules = ["python-3.10"]
+
+[nix]
+channel = "stable-23_05"
+
+[unitTest]
+language = "python3"
+
+[gitHubImport]
+requiredFiles = [".replit", "replit.nix"]
+
+[deployment]
+deploymentTarget = "static"
+publicDir = "/static"
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
+exposeLocalhost = true
+
+[[ports]]
+localPort = 8080
+externalPort = 80

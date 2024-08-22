@@ -8,13 +8,11 @@ from mysql import connector
 
 # IMPLEMENTAÇÃO CONN - MYSQL / POSTGRES
 
-load_dotenv()
-
-host = os.getenv('HOST')
-user = os.getenv('USUARIO')
-password = os.getenv('SENHA')
-schema = os.getenv('NAME')
-port = os.getenv('PORTA')
+host = 'srv720.hstgr.io'
+user = 'u611546537_DBA_Droone'
+password = 'S3nh@FOrt3DBA_DrOOne_2024###'
+schema = 'u611546537_Droone'
+port = '3306'
 
 
 def conectar(host, user, password, schema):
@@ -33,7 +31,9 @@ def conectar(host, user, password, schema):
             cursor.execute('select database()')
             banco_de_dados = cursor.fetchone()
             if banco_de_dados:
-                print(f'conectado com sucesso ao Banco de Dados {banco_de_dados[0]}')
+                print(
+                    f'conectado com sucesso ao Banco de Dados {banco_de_dados[0]}'
+                )
             else:
                 print('Connection successful, but no database found.')
             return connection, cursor
@@ -85,6 +85,14 @@ def setup_database():
             password TEXT
         )
         ''')  # Criação da Tabela users
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT,
+            token TEXT,
+            default INTEGER DEFAULT 0
+        )
+        ''')  # Criação da Tabela tokens
         conn.commit()
         cursor.close()
         return {"message": "Database setada com sucesso."}

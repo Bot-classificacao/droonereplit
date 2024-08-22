@@ -22,15 +22,14 @@ class User_create(BaseModel):
 
     @validator('username')
     def check_username(cls, value):
-        if not re.match(r"^.*$", value):
-            raise ValueError("")
+        # REGEX Removido
         return value
-        
+
     @validator('password')
     def check_password(cls, value):
-        if not re.match(r"^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$",value):
-            raise ValueError('A senha necessita ao menos 8 dígitos, incluindo uma letra maiúscula, um número e um caractere especial.')
+        # REGEX removido
         return value
+
 
 
 class User_login(BaseModel):
@@ -39,10 +38,7 @@ class User_login(BaseModel):
 
     @validator('password')
     def check_password(cls, value):
-        if not re.match(
-                r"^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$",
-                value):
-            raise ValueError('Senha Incorreta!')
+        # REGEX removido
         return value
 
 

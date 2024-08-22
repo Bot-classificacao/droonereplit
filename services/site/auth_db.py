@@ -5,6 +5,9 @@ from passlib.context import CryptContext
 
 from ..connection import get_connection
 
+import string
+import random
+
 DATABASE_URL = "test.db"
 
 # Contexto do Passlib para hash de senha
@@ -91,3 +94,95 @@ async def login(user):
     finally:
         cursor.close()
         conn.close()
+
+
+#  Generate Token Function
+async def generate_token(user):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('SELECT * FROM users WHERE email = ? LIMIT 1;',
+                       (user.email, ))
+        db_user = cursor.fetchone()
+
+        if db_user:
+            token = ''.join(
+                random.choice(string.ascii_uppercase + string.digits)
+                for _ in range(5))
+            cursor.execute('INSERT INTO tokens (email, token) VALUES (?, ?)',
+                           (db_user[2], token))
+
+            conn.commit()
+
+            return token
+
+    except Exception as e:
+        raise HTTPException(status_code=500,
+                            detail=f"Erro ao gerar token: {str(e)}") from e
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+#  Validate Token Function
+async def validate_token(user):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('SELECT * FROM users WHERE email = ? LIMIT 1;',
+                       (user.email, ))
+        db_user = cursor.fetchone()
+
+        if db_user:
+            cursor.execute(
+                'SELECT * FROM tokens WHERE email = ? AND token = ? AND ja_usado = 0 LIMIT 1;',
+                (user.email, user.token))
+
+            is_valid = cursor.fetchone()
+
+            if is_valid:
+                cursor.execute('UPDATE tokens SET ja_usado = 1 WHERE email = ?',
+                               (db_user[2],))
+    
+                conn.commit()
+
+                return {'message': 'Sucesso. Token Válido!'}
+
+    except Exception as e:
+        raise HTTPException(status_code=500,
+                            detail=f"Erro ao validar o token: {str(e)}") from e
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+#  Validate Token Function
+async def forgot_pass(user):
+    conn = get_connection()
+    cursor = conn.cursor()
+    hashed_password = get_password_hash(user.senha)
+
+    cursor.execute('SELECT * FROM users WHERE email = ?', (user.email, ))
+    
+    if not cursor.fetchone():
+        raise HTTPException(status_code=400, detail="Email não existe.")
+
+    cursor.execute(
+        'UPDATE users SET password = ? WHERE email = ?',
+        (hashed_password, user.email, ))
+    conn.commit()
+
+    cursor.execute('SELECT * FROM users WHERE email = ?', (user.email, ))
+    db_user = cursor.fetchone()
+    cursor.close()
+
+    if db_user:
+        return {"message": "Senha atualizada!"}
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail="Falha ao atualizar a senha do usuário no banco de dados.")

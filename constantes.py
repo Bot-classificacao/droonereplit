@@ -1,7 +1,5 @@
-password_old = 'b a l z k b k x b f l j x a s t'
-# envia os emails
-my_email = 'droone.server.0001@gmail.com'
-password_new = 'wuvc usnl epea okoq'
+sender_mail_droone ='droone.server.0001@gmail.com'
+password_mail_droone='c z h n h y x y x o e w r b k i'
 
 # recebe as msgs do email
 mail_name_listener = 'listener@droone.com.br'

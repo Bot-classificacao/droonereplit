@@ -6,13 +6,12 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from os.path import basename
 from email import encoders
-
 porta = 587
 porta_hostiger = 465
 host = 'smtp.gmail.com'
 host_hostiger = ' smtp.hostinger.com'
 my_mail = 'droone.server.0001@gmail.com'
-my_key = 'wuvc usnl epea okoq'  #key do app google
+my_key = 'c z h n h y x y x o e w r b k i'  #key do app google
 
 
 def message_send(para, assunto, mensagem, files=None):
@@ -65,3 +64,4 @@ def connect_mail_send(para, msg):
         smtp.starttls()
         smtp.login(user=my_mail, password=my_key)
         smtp.sendmail(my_mail, para, msg.as_string())
+

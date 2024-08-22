@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+import subprocess
 from contextlib import asynccontextmanager
 from typing import Dict, List
 import sys
@@ -129,8 +130,14 @@ def listener_email():
     loop.run_until_complete(classify_email())
     listener = sinal_divino(listener)
 
-
+def run_api_whats():
+    filepath = 'send_alerts/send_api.py'
+    subprocess.run(['python', filepath])
+    
 if __name__ == "__main__":
     email_thread = Thread(target=listener_email)
     email_thread.start()
+    whats_thread = Thread(target=run_api_whats)
+    whats_thread.start()
+
     uvicorn.run(app, host="0.0.0.0", port=8080)

@@ -7,6 +7,6 @@ def enviar_alerta_whatsapp(fone, mensagem):
     DrooneSend().send_message(fone, mensagem)
 
 
-def enviar_alerta_email(para, assunto, mensagem, caminho_imagem):
+def enviar_alerta_email(para, assunto, mensagem, caminho_imagem = None):
     print('Função ALERTA EMAIL recebida', caminho_imagem)
     message_send(para, assunto, mensagem, caminho_imagem)

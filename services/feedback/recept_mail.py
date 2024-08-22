@@ -1,23 +1,16 @@
 import asyncio
 import imaplib
-import os
-from dotenv import load_dotenv
+
 from imap_tools.query import OR
-from send_alerts.verify_bd import is_mail_cliente
+from send_alerts.verify_bd import *
 from services.alerts import enviar_alerta_email as enviar_alerta_email
 from services.alerts import enviar_alerta_whatsapp as enviar_alerta_whatsapp
 
 from services.classificador.classifier_alert_report import carregar_ou_treinar_modelo, processar_nova_imagem
 from services.connection import conectar, desconectar
-from .cams_db import insertCam, isCircuito, isLocCamera, isClienteValid, insertImage, isWppCliente, isEmailCircuito, isIdCamera
-from imap_tools import MailBox, AND
-from services.feedback.constantes import my_email, mail_name_listener, mail_pass_listener, password_new, HOST, PORTA, NAME, USUARIO, SENHA
-# Carregando variáveis de ambiente
-load_dotenv()
 
-# Credenciais de banco de dados e servidor de e-mail
-EMAIL = my_email
-SENHA_EMAIL = password_new
+from imap_tools import MailBox, AND
+from constantes import *
 
 
 def get_imagem(att):
@@ -35,25 +28,23 @@ def get_imagem(att):
     return None
 
 
-async def count_mail() -> int:
+def count_mail() -> int:
     # estrutura with para abrir e fechar email, e configs do email como caixa de msg, senha, usuario e servidor
     with MailBox('imap.hostinger.com',
                  993).login(username=mail_name_listener,
                             password=mail_pass_listener,
                             initial_folder='INBOX') as mailbox:
         # Busca tds os emails da pasta INBOX, caso esteja em spam add (.junk) dps de INBOX, ordenado por data mais recente
-        dvrs = [
-            'ALERTA DVR - Aclimacao Offices'
-            # and 'ALERTA DVR - Aclimação Offices'
-        ]
         msgs = mailbox.fetch(AND(subject='ALERTA DVR - Aclimacao Offices',
                                  seen=False),
                              charset='UTF-8',
                              reverse=True,
                              mark_seen=False)
 
-        # Acesse o e-mail mais recente
+        # ordena as mensagens
+        # msgs = sorted(msgs, key=lambda x: x.date, reverse=True)
         inbox_mail = []
+        # Acesse o e-mail mais recente
         if msgs:  # verifica se encontrou e-mails
             for msg in msgs:
                 inbox_mail.append(msg)
@@ -63,7 +54,7 @@ async def count_mail() -> int:
             return 0
 
 
-async def get_mail() -> dict:
+def get_mail() -> dict:
     print("Iniciando get_mail")
     try:
         # estrutura with para abrir e fechar email, e configs do email como caixa de msg, senha, usuario e servidor
@@ -73,18 +64,19 @@ async def get_mail() -> dict:
                                 initial_folder='INBOX') as mailbox:
             # Busca tds os emails da pasta INBOX, caso esteja em spam add (.junk) dps de INBOX, ordenado por data mais recente
 
-            msgs = mailbox.fetch(AND(subject='ALERTA DVR - Aclimacao Offices',
-                                     seen=False),
-                                 reverse=True,
-                                 charset='UTF-8',
-                                 mark_seen=True)
+            msgs = mailbox.fetch(
+                AND(subject='ALERTA DVR - Aclimacao Offices', seen=False),
+                # reverse=True,
+                charset='UTF-8',
+                mark_seen=True)
             # ordena as mensagens
-            msgs = sorted(msgs, key=lambda x: x.date, reverse=True)
+            msgs = sorted(msgs, reverse=True, key=lambda x: x.date)
             # Acesse o e-mail mais recente
             if msgs:  # verifica se encontrou e-mails
                 for msg in msgs:
                     sender = msg.from_
                     subject = msg.subject
+
                     body = msg.text
                     date_mail = msg.date.strftime('%Y-%m-%d %H:%M:%S')
                     filenames = []
@@ -152,13 +144,13 @@ async def filtraEmail(txt: str):
 async def classify_email():
     while True:
         print("Loop ta rodando")
-        list_mails = await count_mail()
+        list_mails = count_mail()
         print(f'mensagens não lidas : {list_mails}')
         for iterator in range(list_mails):
-            email = await get_mail()
+            email = get_mail()
             print("Email pego")
             cnx, cur = None, None
-            if email != None:
+            if email:
                 try:
                     cnx, cur = conectar(HOST, USUARIO, SENHA, NAME)
                     print("Filtrando o email")
@@ -193,57 +185,53 @@ async def classify_email():
                     dispositivo = dic_body['dispositivo']
                     sender_email = email['sender']
                     BASE_PATH_IMG = 'classificador/classificadorIA/queue/'
-                    # enviar_alerta_email(
-                    #     cliente_email, 'ALERTA - DVR', alerta_msg,
-                    #     os.path.join(BASE_PATH_IMG, path_files))
-                    # print('email resposta enviado com suscesso')
 
                     # valida cliente
-                    id_cliente, id_circuito = isClienteValid(cur, sender_email)
+                    id_cliente, id_circuito = eh_valid_client(
+                        cur, sender_email)
                     if id_cliente is not None and id_circuito is not None:
                         print(
-                            f'ID Circuito: {id_circuito}\nID Cliente: {id_cliente}'
+                            f"ID Circuito: {id_circuito}\nID Cliente: {id_cliente}"
                         )
                         if id_cliente is not None and id_circuito is not None:
-                            # pega a localizacao da camera
-                            # cam = isLocCamera(cur, id_circuito)
-                            id_cam = isIdCamera(cur, id_circuito)
+                            id_cam = eh_id_cam(cur, id_circuito)
                             # Caso o id seja nulo ele insere ao db pois o cliente está em nossa base
                             if id_cam is None:
-                                insertCam(cur, cnx, id_circuito, end_ip)
-                                id_cam = isIdCamera(cur, id_circuito)
-                            print('ID da camera: ', id_cam)
-                            # cam = isLocCamera(cur, id_circuito)
-                        if id_cliente is not None and id_circuito is not None and id_cam is not None:
+                                insert_camera(cur, cnx, id_circuito, end_ip)
+                                id_cam = eh_id_cam(cur, id_circuito)
+                            print("ID da camera: ", id_cam)
+                        if (id_cliente is not None and id_circuito is not None
+                                and id_cam is not None):
                             full_path = os.path.join(BASE_PATH_IMG, path_files)
-                            insertImage(cnx, cur, email['date'], full_path,
-                                        status_img, id_cliente, id_circuito,
-                                        id_cam)
-                            print(
-                                'Dados inseridos na tabela de processamento!!!'
+                            insert_file_process(
+                                cnx,
+                                cur,
+                                email["date"],
+                                full_path,
+                                status_img,
+                                id_cliente,
+                                id_circuito,
+                                id_cam,
                             )
-                            whatsapp = is_mail_cliente(cur, id_cliente)
+                            print(
+                                "Dados inseridos na tabela de processamento!!!"
+                            )
+                            whatsapp = is_whatsapp_cliente(cur, id_cliente)
                             email_cliente = is_mail_cliente(cur, id_cliente)
-                            if email:
-                                enviar_alerta_email(email_cliente,
-                                                    'ALERTA - DVR', alerta_msg,
-                                                    None)
-                            print(f'''
-                                whatsapp: {whatsapp}
-                                email do cliente: {email_cliente}
-                                ''')
+                            print("email: ", email_cliente, "\nwhatsapp: ",
+                                  whatsapp)
+                            if "Não há anexo" not in path_files:
+                                modelo = carregar_ou_treinar_modelo()
+                                processar_nova_imagem(
+                                    os.path.join(BASE_PATH_IMG,
+                                                 path_files), modelo,
+                                    email_cliente, whatsapp, email['date'])
                         else:
-                            print('Erro ao inserir dados no banco de dados')
+                            print("Erro ao inserir dados no banco de dados")
                     else:
                         print(
                             f"cliente não encontrado para o cliente em nossa base de dados"
                         )
-
-                    # enviar_alerta_whatsapp(wpp, alerta_msg)
-                    modelo = carregar_ou_treinar_modelo()
-                    processar_nova_imagem(
-                        os.path.join(BASE_PATH_IMG, path_files), modelo,
-                        sender_email)
 
                 except Exception as e:
                     print(f"Erro ao processar o email: {e}")
@@ -251,7 +239,7 @@ async def classify_email():
                     desconectar(cnx, cur)
             else:
                 print(
-                    'Não há emails do @Droone!! por favor verifique a caixa de email'
+                    'Não há emails do @DVR!! por favor verifique a caixa de email'
                 )
             print("Loop de emails finalizado")
         import random as rd

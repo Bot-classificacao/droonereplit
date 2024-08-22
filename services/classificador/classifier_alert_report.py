@@ -3,6 +3,7 @@ import shutil
 import numpy as np
 import tensorflow as tf
 
+from send_alerts.send_api import envio
 from services.alerts import enviar_alerta_whatsapp, enviar_alerta_email
 
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
@@ -89,7 +90,7 @@ def treinar_modelo():
     return modelo
 
 
-def classificar_imagem_com_ia(caminho_imagem, modelo, email):
+def classificar_imagem_com_ia(caminho_imagem, modelo, email, whats_cliente,periodo):
     print(f"Classificando imagem: {caminho_imagem}")
     imagem = load_img(caminho_imagem, target_size=(180, 180))
     imagem = img_to_array(imagem)
@@ -113,16 +114,22 @@ def classificar_imagem_com_ia(caminho_imagem, modelo, email):
 
         print(f"Imagem classificada como {classe} com confiança {confianca}%")
 
-        if confianca < 70 and classe == "Não Autorizado":
-            enviar_alerta_email(
-                email, 'Alerta de Acesso Não Autorizado',
-                f'Acesso não autorizado detectado com {confianca:.2f}% de confiança.',
-                [destino])
-
-            enviar_alerta_whatsapp(
-                '+556791758876',
-                f'Alerta de segurança: Acesso não autorizado detectado com {confianca:.2f}% de confiança.'
-            )
+        if confianca < 55 and classe == "Não Autorizado":
+            ass = f""" <p>Alerta de Acesso Não Autorizado",</p>
+                        <p>Acesso não autorizado detectado com {confianca:.2f}% de confiança.</p>
+                        <p>caminho da imagem:{[destino]}</p>
+            """
+            whats_msg = f"""
+            Alerta de segurança: Acesso não autorizado detectado com {confianca:.2f}% de confiança.
+            """
+            if email != None:
+                # def message_send(para, assunto, mensagem, files=None):
+                enviar_alerta_email(email, 'Alerta - Droone', ass,
+                                    caminho_imagem)
+            if whats_cliente != None:
+                envio(whats_cliente, whats_msg, periodo)
+                print('API sensibilizada')
+                # enviar_alerta_whatsapp(whats_cliente, whats_msg)
 
         return classe, confianca
     except Exception as e:
@@ -130,9 +137,9 @@ def classificar_imagem_com_ia(caminho_imagem, modelo, email):
         return None, None
 
 
-def processar_nova_imagem(caminho_imagem, modelo, email):
+def processar_nova_imagem(caminho_imagem, modelo, email, whats_cliente,periodo):
     classe, confianca = classificar_imagem_com_ia(caminho_imagem, modelo,
-                                                  email)
+                                                  email, whats_cliente,periodo)
     destino_base = "classificador/classificadorIA/classificados"
     destino = os.path.join(
         destino_base,

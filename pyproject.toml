@@ -19,6 +19,7 @@ keras = "3.4.1"
 numpy1 = "0.0.1"
 psutil = "^6.0.0"
 pyperclip = "^1.9.0"
+sqlalchemy = "^2.0.14"
 zsvision = "^0.7.12"
 
 [tool.pyright]

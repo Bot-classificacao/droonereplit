@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from mysql.connector import errors, errorcode
+from mysql.connector import Error, errors
 
 from dotenv import load_dotenv
 from fastapi import HTTPException
@@ -8,42 +8,37 @@ from mysql import connector
 
 # IMPLEMENTAÇÃO CONN - MYSQL / POSTGRES
 
-host = 'srv720.hstgr.io'
-user = 'u611546537_DBA_Droone'
-password = 'S3nh@FOrt3DBA_DrOOne_2024###'
-schema = 'u611546537_Droone'
-port = '3306'
+HOST = 'srv720.hstgr.io'
+USER = 'u611546537_DBA_Droone'
+PASSWORD = 'S3nh@FOrt3DBA_DrOOne_2024###'
+SCHEMA = 'u611546537_Droone'
 
 
-def conectar(host, user, password, schema):
-    connection = None
-    cursor = None
+def conectar():
     try:
         print('MySQL')
         connection = connector.connect(
-            host=host,
-            user=user,
-            password=password,
-            database=schema,
+            host=HOST,
+            user=USER,
+            password=PASSWORD,
+            database=SCHEMA,
         )
+        print(connection)
         if connection.is_connected():
-            cursor = connection.cursor()
+            cursor = connection.cursor(buffered=True)
             cursor.execute('select database()')
             banco_de_dados = cursor.fetchone()
-            if banco_de_dados:
-                print(
-                    f'conectado com sucesso ao Banco de Dados {banco_de_dados[0]}'
-                )
-            else:
-                print('Connection successful, but no database found.')
-            return connection, cursor
+            try:
+                if banco_de_dados:
+                    print('conectado com sucesso ao Banco de Dados')
+                    return connection, cursor
+            except Exception as e:
+                print('Connection successful, but no database found.', e)
         else:
             print("Connection failed.")
-
-    except mysql.connector.errors.Error as err:
-        raise Exception('Erro: ', err) from err
-    finally:
-        return connection, cursor
+    except errors.DatabaseError as err:
+        print(f"Erro ao conectar ao MySQL: {err}")
+        return None
 
 
 def desconectar(connection, cursor) -> bool:
@@ -51,8 +46,8 @@ def desconectar(connection, cursor) -> bool:
         if cursor:
             cursor.close()
         connection.close()
-        print('Conection closed...')
-    return not connection.is_connected()
+        print('Connection closed...')
+    return not connection.is_connected() if connection else True
 
 
 #SQLite
@@ -70,7 +65,6 @@ def get_connection():
 # Configuração do SQLite
 def setup_database():
     print('SQLite')
-    #cursor, connection = conectar(host, user, password, schema)
     # TODO - Teste de conexão com o MySQL
 
     conn = get_connection()
@@ -78,15 +72,15 @@ def setup_database():
 
         cursor = conn.cursor()  # Setup Database deveria garantir o ACT
         cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE IF NOT EXISTS tbl_users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
             email TEXT UNIQUE,
             password TEXT
         )
-        ''')  # Criação da Tabela users
+        ''')  # Criação da Tabela tbl_users
         cursor.execute('''
-        CREATE TABLE IF NOT EXISTS tokens (
+        CREATE TABLE IF NOT EXISTS tbl_tokens (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT,
             token TEXT,
@@ -106,6 +100,18 @@ def setup_database():
 
 
 # main garante que o banco de dados seja criado -> connection garante cur, cnx
+# Nova função
+def insert_image(image_path, description):
+    connection, cursor = conectar()
+    with open(image_path, "rb") as f:
+        image_data = f.read()
+    sql = "INSERT INTO images (image, description) VALUES (%s, %s)"
+    cursor.execute(sql, (image_data, description)) if cursor else None
+    conn[0].commit() if conn[0] else None
+    if cursor:
+        cursor.close()
+    desconectar(conn, cursor)
+    return image_data
 
 
 def testes():

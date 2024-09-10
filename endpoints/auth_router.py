@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+import sqlite3
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 from send_alerts.sender_mail import message_send
 
@@ -33,9 +34,9 @@ class LoginRequest(BaseModel):
 # Endpoint de login
 @router.post("/login")
 async def login_router(request: LoginRequest):
+    # Descriptografar o email e senha
     user = User_login(email=EmailStr(request.email), password=request.password)
     return await auth.login(user)
-
 
 # BaseModel de TokenRequest
 class TokenRequest(BaseModel):
@@ -92,6 +93,32 @@ async def forgot_pass_end(request: ChangePasswordForgot):
                                 senha=request.senha)
 
     return await auth.forgot_pass(user)
+
+# get all users
+@router.get("/get-users")
+def get_users_page():
+    conn = sqlite3.connect('test.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tbl_users")
+    rows = cursor.fetchall()
+    conn.close()
+    users = [{"id": row[0], "name": row[1], "email": row[2]} for row in rows]
+    return users
+
+# Get user by email
+@router.get("/user/{email}")
+async def get_user(email: str):
+    try:
+        user = await get_user_by_email(email)
+        if user:
+            return user
+        else:
+            raise HTTPException(status_code=404,
+                                detail="Usuário não encontrado")
+    except Exception as e:
+        raise HTTPException(status_code=500,
+                            detail=f"Erro ao buscar usuário: {str(e)}") from e
+
 
 
 

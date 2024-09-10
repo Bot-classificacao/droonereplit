@@ -1,34 +1,22 @@
 import asyncio
 import imaplib
-
+import os
+import time
 from imap_tools.query import OR
+from send_alerts.send_with_api import postar
 from send_alerts.verify_bd import *
 from services.alerts import enviar_alerta_email as enviar_alerta_email
 from services.alerts import enviar_alerta_whatsapp as enviar_alerta_whatsapp
 
 from services.classificador.classifier_alert_report import carregar_ou_treinar_modelo, processar_nova_imagem
-from services.connection import conectar, desconectar
+from services.connection import conectar, desconectar, insert_image
 
 from imap_tools import MailBox, AND
 from constantes import *
+from services.feedback.uteis_mail import apply_images, get_image_id_by_date, update_image_by_id
 
 
-def get_imagem(att):
-    print("Verificando anexo de imagem")
-    queue_path = 'classificador\\classificadorIA\\queue'
-    file_names = []
-    if len(att) > 0:
-        file_name = att.filename
-        file_names.append(file_name)
-        byte_img = att.payload
-        with open(os.path.join(queue_path, file_name), 'wb') as anx:
-            anx.write(byte_img)
-        return file_names
-    print("Nenhuma imagem encontrada")
-    return None
-
-
-def count_mail() -> int:
+async def count_mail() -> int:
     # estrutura with para abrir e fechar email, e configs do email como caixa de msg, senha, usuario e servidor
     with MailBox('imap.hostinger.com',
                  993).login(username=mail_name_listener,
@@ -42,7 +30,7 @@ def count_mail() -> int:
                              mark_seen=False)
 
         # ordena as mensagens
-        # msgs = sorted(msgs, key=lambda x: x.date, reverse=True)
+        msgs = sorted(msgs, key=lambda x: x.date, reverse=True)
         inbox_mail = []
         # Acesse o e-mail mais recente
         if msgs:  # verifica se encontrou e-mails
@@ -54,7 +42,7 @@ def count_mail() -> int:
             return 0
 
 
-def get_mail() -> dict:
+async def get_mail() -> dict:
     print("Iniciando get_mail")
     try:
         # estrutura with para abrir e fechar email, e configs do email como caixa de msg, senha, usuario e servidor
@@ -70,7 +58,7 @@ def get_mail() -> dict:
                 charset='UTF-8',
                 mark_seen=True)
             # ordena as mensagens
-            msgs = sorted(msgs, reverse=True, key=lambda x: x.date)
+            # msgs = sorted(msgs, reverse=True, key=lambda x: x.date)
             # Acesse o e-mail mais recente
             if msgs:  # verifica se encontrou e-mails
                 for msg in msgs:
@@ -109,7 +97,7 @@ def get_mail() -> dict:
     return None
 
 
-async def filtraEmail(txt: str):
+async def filter_mail(txt: str):
     txt = txt.replace('\r', ' ')
     txt = txt.replace('\n', ' ')
     if 'término' in txt:
@@ -141,24 +129,35 @@ async def filtraEmail(txt: str):
     }
 
 
+# 06-09 Fioruci refatorando
 async def classify_email():
     while True:
         print("Loop ta rodando")
-        list_mails = count_mail()
+        list_mails = await count_mail()
         print(f'mensagens não lidas : {list_mails}')
         for iterator in range(list_mails):
-            email = get_mail()
+            email = await get_mail()
             print("Email pego")
             cnx, cur = None, None
             if email:
                 try:
-                    cnx, cur = conectar(HOST, USUARIO, SENHA, NAME)
+                    cnx, cur = conectar()
                     print("Filtrando o email")
-                    dic_body = await filtraEmail(email['body'])
+                    dic_body = await filter_mail(email['body'])
                     if not dic_body:
                         raise ValueError(
                             "filtra_email retornou um dicionário vazio")
                     print(f"dic_body: {dic_body}")
+
+                    # verifica o status a partir da lista (email['filename']) -> retorna o dicionario ['path'] e ['status']
+                    # Obs: ainda em teste favor nn alterar por enquanto
+                    result = apply_images(email)
+                    path_str = result.get('path')
+                    status = result.get('status')
+                    print(f"""
+                    path_str: {path_str}
+                    status : {status}
+                    """)
 
                     path_files = ', '.join(
                         email['filename']
@@ -218,33 +217,79 @@ async def classify_email():
                             )
                             whatsapp = is_whatsapp_cliente(cur, id_cliente)
                             email_cliente = is_mail_cliente(cur, id_cliente)
+                            ass = f"""                           
+                            <p>Alerta de segurança: Acesso cameras detectaram uma movimentação.</p>
+                            <p>Cliente:    {email_cliente}</p>
+                            <p>Circuito: {end_ip}</p>
+                            <p>Camêra: {dispositivo}</p>
+                            """
+                            whats_msg = f"Alerta de segurança: Acesso cameras detectaram uma movimentação.\nCliente:    {email_cliente}\nCircuito: {end_ip}\nCamêra: {dispositivo}"
+
+                            if whatsapp != None:
+                                postar(whatsapp, whats_msg, email['date'])
+                            if email_cliente != None:
+                                enviar_alerta_email(
+                                    email_cliente,
+                                    'ALERTA -DROONE - VJBOTS', ass,
+                                    os.path.join(BASE_PATH_IMG, path_files))
                             print("email: ", email_cliente, "\nwhatsapp: ",
                                   whatsapp)
                             if "Não há anexo" not in path_files:
                                 modelo = carregar_ou_treinar_modelo()
-                                processar_nova_imagem(
-                                    os.path.join(BASE_PATH_IMG,
-                                                 path_files), modelo,
-                                    email_cliente, whatsapp, email['date'])
-                        else:
-                            print("Erro ao inserir dados no banco de dados")
+                                print("Classificando imagem")
+                                for filename in email['filename']:
+                                    path_full_img = os.path.join(
+                                        BASE_PATH_IMG, filename)
+                                    print(
+                                        f"Processando imagem: {path_full_img}")
+                                    processar_nova_imagem(
+                                        path_full_img, modelo, email_cliente,
+                                        whatsapp, email['date'])
+                                    # pega a imagem inserida agora
+                                    id_image = get_image_id_by_date(
+                                        date=email['date'])
+                                    # da um update no campo status
+                                    update_image_by_id(id=id_image)
+                            else:
+                                print(
+                                    "Erro ao inserir dados no banco de dados")
+
                     else:
                         print(
                             f"cliente não encontrado para o cliente em nossa base de dados"
                         )
 
+                except ValueError as ve:
+                    print(f"Erro de validação: {ve}")
                 except Exception as e:
-                    print(f"Erro ao processar o email: {e}")
+                    print(f"Erro inesperado ao processar o email: {e}")
                 finally:
-                    desconectar(cnx, cur)
+                    if cnx and cur:
+                        desconectar(cnx, cur)
             else:
                 print(
                     'Não há emails do @DVR!! por favor verifique a caixa de email'
                 )
             print("Loop de emails finalizado")
+            time.sleep(30)  # Espera 30 segundos antes de verificar novamente
         import random as rd
-        sleep_seconds = rd.randrange(60, 600)
+        sleep_seconds = rd.randrange(60, 120)
+        await asyncio.sleep(round(sleep_seconds))
 
-        await asyncio.sleep(
-            round(sleep_seconds)
-        )  # Espera de 10 segundos antes de verificar novamente
+
+# Nova Função
+async def processar_email_e_imagem():
+    email = await get_mail()
+    if email and 'filename' in email:
+        for filename in email.get('filename', ()):
+            image_path = os.path.join('classificador/classificadorIA/queue',
+                                      filename)
+            insert_image(image_path,
+                         'Descrição opcional ou detalhes do e-mail')
+            print(f"Imagem {filename} armazenada no banco de dados.")
+
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(processar_email_e_imagem())
+    loop.close()

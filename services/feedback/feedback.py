@@ -1,63 +1,66 @@
-import sqlite3
+
 from fastapi import HTTPException
 
-DATABASE_URL = "test.db"
+from services.connection import conectar, desconectar
 
-
-def get_connection():
-    conn = sqlite3.connect(DATABASE_URL, check_same_thread=False)
-    return conn
 
 def store_feedback(image_id: int, correct_classification: str):
-    conn = get_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO feedback (image_id, correct_classification) VALUES (?, ?)",
+        cnx, cur = conectar()
+        cur.execute(
+            "INSERT INTO tbl_feedbacks (image_id, correct_classification) VALUES (%s, %s);",
             (image_id, correct_classification))
-        conn.commit()
+        cnx.commit()
+
     except Exception as e:
         raise HTTPException(status_code=500,
-                            detail="Erro ao armazenar feedback") from e
+                            detail=f"Erro ao armazenar feedback: {str(e)}")
     finally:
-        cursor.close()
-        conn.close()
+        desconectar(cnx, cur)
     return {"message": "Feedback armazenado com sucesso!"}
 
 
 def get_feedback(image_id: int):
-    conn = get_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM feedback WHERE image_id = ?",
-                       (image_id, ))
-        feedback = cursor.fetchone()
+        cnx, cur = conectar()
+
+        cur.execute(
+            "SELECT image_id, correct_classification FROM tbl_feedbacks WHERE image_id = %s",
+            (image_id, ))
+
+        feedback = cur.fetchone()
+        if feedback:
+            return {
+                "image_id": feedback[0],
+                "correct_classification": feedback[1]
+            }
     except Exception as e:
         raise HTTPException(status_code=500,
-                            detail="Erro ao obter feedback") from e
-    finally:
-        cursor.close()
-        conn.close()
-    if feedback:
-        return {"image_id": feedback[0], "correct_classification": feedback[1]}
-    else:
-        return None
+                            detail=f"Erro ao obter feedback: {str(e)}")
+    return None
 
 
-def get_all_feedback_ids():
-    conn = get_connection()
+def get_ocorrencias(id_user):
     try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT image_id FROM feedback")
+        cnx, cur = conectar()
+        cur.execute("SELECT image_id FROM feedback")
         feedback_ids = cursor.fetchall()
         return [id[0] for id in feedback_ids]
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail="Erro ao obter todos os IDs de feedback") from e
+            detail=f"Erro ao obter todos os IDs de feedback: {str(e)}")
+
+
+def count_feedback_by_user(user_id):
+    try:
+        cnx, cur = conectar()
+        cur.execute("SELECT COUNT(*) FROM tbl_feedbacks WHERE user_id = %s",
+                    (user_id, ))
+        result = cur.fetchone()
+        return result[0] if result else 0
+    except Exception as e:
+        print(f"Error counting feedbacks: {str(e)}")
+        return 0
     finally:
-        cursor.close()
-        conn.close()
-
-
-# Chame setup_feedback_table quando necessário, por exemplo, na inicialização do sistema
+        desconectar(cnx, cur)

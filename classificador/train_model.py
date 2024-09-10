@@ -67,7 +67,7 @@ data_argumentation = Sequential([
     RandomRotation(0.2),
     RandomZoom((0.2, 0.3))
 ])
-# trasferencia de aprendizads
+# trasferencia de aprendizado
 model_transfer_learning = tf.keras.applications.MobileNetV2(
     input_shape=(image_shape), include_top=False, weights='imagenet')
 model_transfer_learning.trainable = True

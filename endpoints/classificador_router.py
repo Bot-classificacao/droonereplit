@@ -14,7 +14,7 @@ async def classificar_imagem(file: UploadFile = File(...)):
         caminho_imagem = f"classificador/classificadorIA/queue/{file.filename}"
         with open(caminho_imagem, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        classe, confianca = classificar_imagem_com_ia(caminho_imagem, modelo)  
+        classe, confianca = classificar_imagem_com_ia(caminho_imagem, modelo)
         return {"classe": classe, "confiança": confianca}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

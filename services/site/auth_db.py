@@ -1,14 +1,10 @@
-import sqlite3
-
 from fastapi import HTTPException
 from passlib.context import CryptContext
 
-from ..connection import get_connection
+from ..connection import conectar, desconectar, get_connection
 
 import string
 import random
-
-DATABASE_URL = "test.db"
 
 # Contexto do Passlib para hash de senha
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -23,166 +19,199 @@ def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 
-# Register Function
+# Register function
 async def register(user):
     hashed_password = get_password_hash(user.password)
-    conn = get_connection()
     try:
-        cursor = conn.cursor()
+        print("== Usuário sendo registrado")
+        cnx, cur = conectar()
+        print("==+ Usuário sendo registrado")
 
-        cursor.execute('SELECT * FROM users WHERE email = ?', (user.email, ))
-        if cursor.fetchone():
+        # Verificar se o usuário já existe
+        cur.execute('SELECT * FROM tbl_usermails WHERE email = %s',
+                    (user.email, ))
+        if cur.fetchone():
             raise HTTPException(status_code=400, detail="Email já existe")
 
-        cursor.execute('SELECT * FROM users WHERE username = ?',
-                       (user.username, ))
-        if cursor.fetchone():
+        cur.execute('SELECT * FROM tbl_users WHERE nome = %s',
+                    (user.username, ))
+        if cur.fetchone():
             raise HTTPException(status_code=400, detail="Username já existe")
 
-        cursor.execute(
-            'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
-            (user.username, user.email, hashed_password))
-        conn.commit()
+        # Inserir email
+        print("==== Cadastrando email no banco de dados")
+        cur.execute('INSERT INTO tbl_usermails (email) VALUES (%s)',
+                    (user.email, ))
+        cnx.commit()
 
-        cursor.execute('SELECT * FROM users WHERE email = ?', (user.email, ))
-        db_user = cursor.fetchone()
-        cursor.close()
+        # Selecionar o ID do email recém inserido
+        print("=== Selecionando id do banco")
+        cur.execute('SELECT id_email FROM tbl_usermails WHERE email = %s',
+                    (user.email, ))
+        id_email = cur.fetchone()
+
+        if not id_email:
+            raise HTTPException(status_code=400,
+                                detail="Email não autenticado no sistema")
+
+        print(f"=== ID do email: {id_email[0]}")
+        id_email = int(id_email[0])
+
+        # Inserir usuário
+        print("==== Cadastrando usuário")
+        cur.execute(
+            'INSERT INTO tbl_users (nome, senha, fk_email) VALUES (%s, %s, %s)',
+            (user.username, hashed_password, id_email))
+        cnx.commit()
+
+        print("=== Verificando se usuário foi inserido")
+        cur.execute(
+            """
+            SELECT * FROM tbl_users WHERE fk_email = %s
+        """, (id_email, ))
+        db_user = cur.fetchone()
+        print("=== Usuário inserido com sucesso")
+        desconectar(cnx, cur)
 
         if db_user:
-            return {"message": "Usuário registrado!"}
+            return {"message": "Usuário registrado com sucesso!"}
         else:
-            raise HTTPException(
+            return HTTPException(
                 status_code=500,
                 detail="Falha ao registrar usuário no banco de dados.")
-    except sqlite3.IntegrityError as e:
-        raise HTTPException(
-            status_code=400,
-            detail="Erro de integridade do banco de dados") from e
+
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Falha ao registrar usuário: {str(e)}") from e
-    finally:
-        conn.close()
+        print(f"Erro ao registrar o usuário: {e}")
+        raise HTTPException(status_code=500,
+                            detail=f"Falha ao registrar usuário: {str(e)}")
 
 
 # Login Function
 async def login(user):
-    conn = get_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute('SELECT * FROM users WHERE email = ?', (user.email, ))
-        db_user = cursor.fetchone()
+        cnx, cur = conectar()
+        cur.execute('SELECT id_email FROM tbl_usermails WHERE email = %s',
+                    (user.email, ))
+
+        id_email = cur.fetchone()
+
+        if not id_email:
+            return HTTPException(status_code=400,
+                                 detail="E-Mail não encontrado.")
+
+        cur.execute('SELECT * FROM tbl_users WHERE fk_email = %s',
+                    (id_email[0], ))
+        db_user = cur.fetchone()
+
+        desconectar(cnx, cur)
         if db_user:
-            if verify_password(user.password, db_user[3]):
-                occurrences = db_user[4] if len(db_user) > 4 else 0
+            print("=== Usuário encontrado")
+            if verify_password(user.password, db_user[2]):
                 return {
                     "message": "Login com sucesso!",
-                    "name": db_user[1],
                     "id_cliente": db_user[0],
-                    "occurrences": occurrences
+                    "name": db_user[1],
+                    "email": user.email
                 }
             else:
-                raise HTTPException(status_code=400,
-                                    detail="Credenciais Inválidas.")
+                return HTTPException(status_code=400,
+                                     detail="Credenciais Inválidas. . .")
         else:
-            raise HTTPException(status_code=400,
-                                detail="Usuário não encontrado.")
+            print("=== Usuário não encontrado")
+            return HTTPException(status_code=400,
+                                 detail="Usuário não encontrado.")
     except Exception as e:
-        raise HTTPException(status_code=500,
-                            detail=f"Erro ao logar: {str(e)}") from e
-    finally:
-        cursor.close()
-        conn.close()
+        return HTTPException(status_code=500, detail=f"Erro: {str(e)}")
 
 
 #  Generate Token Function
 async def generate_token(user):
-    conn = get_connection()
-    cursor = conn.cursor()
 
     try:
-        cursor.execute('SELECT * FROM users WHERE email = ? LIMIT 1;',
-                       (user.email, ))
-        db_user = cursor.fetchone()
-
-        if db_user:
+        print("# Gerando token")
+        cnx, cur = conectar()
+        query = "SELECT id_email FROM tbl_usermails WHERE email = %s"
+        cur.execute(query, (user.email, ))
+        id_email = cur.fetchone()
+        print("# SELECT ID EMAIL CONCLUIDO")
+        if id_email:
             token = ''.join(
                 random.choice(string.ascii_uppercase + string.digits)
                 for _ in range(5))
-            cursor.execute('INSERT INTO tokens (email, token) VALUES (?, ?)',
-                           (db_user[2], token))
-
-            conn.commit()
-
+            cur.execute(
+                'INSERT INTO tbl_tokens (email, token) VALUES (%s, %s, 0)',
+                (user.email, token))
+            print("# Token salvo no BD")
+            cnx.commit()
+            desconectar(cnx, cur)
             return token
 
     except Exception as e:
         raise HTTPException(status_code=500,
                             detail=f"Erro ao gerar token: {str(e)}") from e
 
-    finally:
-        cursor.close()
-        conn.close()
-
 
 #  Validate Token Function
 async def validate_token(user):
-    conn = get_connection()
-    cursor = conn.cursor()
 
     try:
-        cursor.execute('SELECT * FROM users WHERE email = ? LIMIT 1;',
-                       (user.email, ))
-        db_user = cursor.fetchone()
+        cnx, cur = conectar()
 
-        if db_user:
-            cursor.execute(
-                'SELECT * FROM tokens WHERE email = ? AND token = ? AND ja_usado = 0 LIMIT 1;',
+        print("=== VALIDATE TOKEN")
+        cur.execute('SELECT fk_email FROM tbl_users INNER JOIN tbl_usermails ON tbl_user.fk_email = tbl_usermails.id_email WHERE tbl_usermails.email = %s LIMIT 1',         (user.email, ))
+        id_email = cur.fetchone()
+        print(f"==== ID EMAIL: {id_email}")
+        if id_email:
+            cur.execute(
+                'SELECT * FROM tbl_tokens WHERE email = %s AND token = %s AND usado = 0 LIMIT 1;',
                 (user.email, user.token))
 
-            is_valid = cursor.fetchone()
+            is_valid = cur.fetchone()
+            print(f"==== IS VALID: {is_valid[0]}")
 
             if is_valid:
-                cursor.execute('UPDATE tokens SET ja_usado = 1 WHERE email = ?',
-                               (db_user[2],))
-    
-                conn.commit()
+                cur.execute('UPDATE tbl_tokens SET usado = 1 WHERE email = %s',
+                            (user.email, ))
+
+                cnx.commit()
 
                 return {'message': 'Sucesso. Token Válido!'}
-
+        desconectar(cnx, cur)
     except Exception as e:
         raise HTTPException(status_code=500,
                             detail=f"Erro ao validar o token: {str(e)}") from e
 
-    finally:
-        cursor.close()
-        conn.close()
-
 
 #  Validate Token Function
 async def forgot_pass(user):
-    conn = get_connection()
-    cursor = conn.cursor()
     hashed_password = get_password_hash(user.senha)
 
-    cursor.execute('SELECT * FROM users WHERE email = ?', (user.email, ))
-    
-    if not cursor.fetchone():
-        raise HTTPException(status_code=400, detail="Email não existe.")
+    try:
+        cnx, cur = conectar()
 
-    cursor.execute(
-        'UPDATE users SET password = ? WHERE email = ?',
-        (hashed_password, user.email, ))
-    conn.commit()
+        cur.execute('SELECT * FROM tbl_users WHERE email = %s', (user.email, ))
 
-    cursor.execute('SELECT * FROM users WHERE email = ?', (user.email, ))
-    db_user = cursor.fetchone()
-    cursor.close()
+        if not cur.fetchone():
+            raise HTTPException(status_code=400, detail="Email não existe.")
 
-    if db_user:
-        return {"message": "Senha atualizada!"}
-    else:
+        cur.execute('UPDATE tbl_users SET password = %s WHERE email = %s', (
+            hashed_password,
+            user.email,
+        ))
+        cnx.commit()
+
+        cur.execute('SELECT * FROM tbl_users WHERE email = %s', (user.email, ))
+        db_user = cur.fetchone()
+        cur.close()
+        desconectar(cnx, cur)
+        if db_user:
+            return {"message": "Senha atualizada!"}
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=
+                "Falha ao atualizar a senha do usuário no banco de dados.")
+    except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail="Falha ao atualizar a senha do usuário no banco de dados.")
+            detail=f"Erro ao atualizar a senha: {str(e)}") from e

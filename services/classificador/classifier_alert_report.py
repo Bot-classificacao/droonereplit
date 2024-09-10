@@ -3,13 +3,16 @@ import shutil
 import numpy as np
 import tensorflow as tf
 
-from send_alerts.send_api import envio
+from send_alerts.send_with_api import postar
 from services.alerts import enviar_alerta_whatsapp, enviar_alerta_email
 
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
 from sklearn.model_selection import train_test_split
+
+from services.feedback.blob import save_image_blob, update_image_path
+from services.utils import image_save, image_to_byte_array, image_update
 
 # Diretórios de dados
 train_data_dir = "classificador/classificadorIA/Treinamento"
@@ -90,7 +93,11 @@ def treinar_modelo():
     return modelo
 
 
-def classificar_imagem_com_ia(caminho_imagem, modelo, email, whats_cliente,periodo):
+def classificar_imagem_com_ia(caminho_imagem,
+                              modelo,
+                              email=None,
+                              whats_cliente=None,
+                              periodo=None):
     print(f"Classificando imagem: {caminho_imagem}")
     imagem = load_img(caminho_imagem, target_size=(180, 180))
     imagem = img_to_array(imagem)
@@ -114,11 +121,12 @@ def classificar_imagem_com_ia(caminho_imagem, modelo, email, whats_cliente,perio
 
         print(f"Imagem classificada como {classe} com confiança {confianca}%")
 
-        if confianca < 55 and classe == "Não Autorizado":
+        if confianca < 70 and classe == "Não Autorizado":
             ass = f""" <p>Alerta de Acesso Não Autorizado",</p>
                         <p>Acesso não autorizado detectado com {confianca:.2f}% de confiança.</p>
                         <p>caminho da imagem:{[destino]}</p>
             """
+
             whats_msg = f"""
             Alerta de segurança: Acesso não autorizado detectado com {confianca:.2f}% de confiança.
             """
@@ -127,7 +135,7 @@ def classificar_imagem_com_ia(caminho_imagem, modelo, email, whats_cliente,perio
                 enviar_alerta_email(email, 'Alerta - Droone', ass,
                                     caminho_imagem)
             if whats_cliente != None:
-                envio(whats_cliente, whats_msg, periodo)
+                postar(whats_cliente, whats_msg, periodo)
                 print('API sensibilizada')
                 # enviar_alerta_whatsapp(whats_cliente, whats_msg)
 
@@ -137,9 +145,11 @@ def classificar_imagem_com_ia(caminho_imagem, modelo, email, whats_cliente,perio
         return None, None
 
 
-def processar_nova_imagem(caminho_imagem, modelo, email, whats_cliente,periodo):
+def processar_nova_imagem(caminho_imagem, modelo, email, whats_cliente,
+                          periodo):
     classe, confianca = classificar_imagem_com_ia(caminho_imagem, modelo,
-                                                  email, whats_cliente,periodo)
+                                                  email, whats_cliente,
+                                                  periodo)
     destino_base = "classificador/classificadorIA/classificados"
     destino = os.path.join(
         destino_base,
@@ -158,8 +168,25 @@ def processar_nova_imagem(caminho_imagem, modelo, email, whats_cliente,periodo):
         print(
             f"Imagem {os.path.basename(caminho_imagem)} movida para {destino}")
 
-    return destino_final
-
+    if classe == "Não Autorizado":
+        # Transforma imagem em blob
+        #blob = image_to_byte_array(destino_base+caminho_imagem)
+        nome_arquivo = os.path.basename(caminho_imagem)
+        # Conferindo se o destino final inclui o proprio nome do arquivo
+        # Se não incluir: destino_final + nome_arquivo
+        print(destino_final)
+        # Caminho antigo, caminho novo
+        # Nome do arquivo, caminho novo (Nao autorizado)
+        update_image_path(nome_arquivo, destino_final)
+        save_image_blob(destino_final)
+        print(
+            f"Imagem {os.path.basename(caminho_imagem)} atualizada com sucesso."
+        )
+def retrofeedback():
+    from tensorflow.keras.models import load_img, img_to_array
+    model = load_model(model_path);
+    model.
+    pass
 
 # Carregar ou treinar o modelo
 modelo = carregar_ou_treinar_modelo()

@@ -6,7 +6,6 @@ from services.connection import conectar, desconectar
 
 data_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-
 cnx, cur = conectar()
 cur = cnx.cursor() if cnx else None
 
@@ -54,13 +53,14 @@ def insertImage(cnx, cur, data_hora_chegada: str, full_path: str,
 # pega a imagem por usuario
 
 
-def getImagesCount(id_cliente):
+def getImagesCount(id_usuario):
     # ,(id_cliente, )
     try:
+        print(f"- COUNT ID USUARIO: {id_usuario}")
         cnx, cur = conectar()
-        query = "SELECT COUNT(*) FROM tbl_imagens I WHERE id_cliente = 1 AND I.id_imagem NOT IN (SELECT F.image_id FROM tbl_feedbacks F)"
+        query = "SELECT COUNT(*) FROM tbl_imagens I INNER JOIN tbl_users U ON I.id_cliente = U.fk_cliente WHERE U.id_user = %s AND I.id_imagem NOT IN (SELECT F.image_id FROM tbl_feedbacks F)";
         print("Gettin count")
-        cur.execute(query)
+        cur.execute(query, (id_usuario, ))
         result = cur.fetchone()
         count = result[0] if result else 0
         return count
@@ -80,10 +80,12 @@ def getImages(id_usuario):
     cur = None
     try:
         cnx, cur = conectar()
-#  AND id_imagem NOT IN (SELECT F.image_id FROM Feedback F)
+        #  AND id_imagem NOT IN (SELECT F.image_id FROM Feedback F)
         print("Getting images")
-        query = "SELECT blob_imagens, id_imagem FROM tbl_imagens WHERE id_cliente = 1 AND id_imagem NOT IN (SELECT F.image_id FROM tbl_feedbacks F) LIMIT 1"
-        cur.execute(query)
+        print(f"GETTIN IMG - ID CLIENTE: {id_usuario}")
+        # id_cliente de imagens = fk_cliente de tbl_usuarios
+        query = "SELECT I.blob_imagens, I.id_imagem FROM tbl_imagens I INNER JOIN tbl_users U ON I.id_cliente = U.fk_cliente WHERE U.id_user = %s AND I.id_imagem NOT IN (SELECT F.image_id FROM tbl_feedbacks F) LIMIT 1"
+        cur.execute(query, (id_usuario, ))
         images = cur.fetchall()
 
         if not images:
@@ -101,9 +103,8 @@ def getImages(id_usuario):
 
     except Exception as e:
         print(f"Erro ao obter imagens: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erro ao obter imagens: {str(e)}")
+        raise HTTPException(status_code=500,
+                            detail=f"Erro ao obter imagens: {str(e)}")
 
     finally:
         if cnx and cur:

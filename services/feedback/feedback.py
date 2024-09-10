@@ -11,6 +11,9 @@ def store_feedback(image_id: int, correct_classification: str):
             "INSERT INTO tbl_feedbacks (image_id, correct_classification) VALUES (%s, %s);",
             (image_id, correct_classification))
         cnx.commit()
+        
+        # flag = True if 'positivo' in correct_classification else False
+        # TODO - Inserir Feedback numa pasta ML
 
     except Exception as e:
         raise HTTPException(status_code=500,

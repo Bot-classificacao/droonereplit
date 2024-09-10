@@ -5,7 +5,7 @@ router = APIRouter()
 dados = {'Numero': '', 'msg': '', 'Periodo': ''}
 
 
-@router.post('whats/send')
+@router.post('/whats/send')
 def envio(numero: str, msg: str, temp: str):
     print('enviando mensagem para API')
     dados['Numero'] = numero

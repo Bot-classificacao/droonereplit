@@ -76,8 +76,8 @@ def listener_email():
 
 
 if __name__ == "__main__":
-    # print('iniciando thred listener...')
-    # email_thread = Thread(target=listener_email)
-    # email_thread.start()
+    print('iniciando thred listener...')
+    email_thread = Thread(target=listener_email)
+    email_thread.start()
     print('Subindo a API main...')
     uvicorn.run(app, port=8000, reload=False)

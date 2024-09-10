@@ -99,6 +99,9 @@ def classificar_imagem_com_ia(caminho_imagem,
                               whats_cliente=None,
                               periodo=None):
     print(f"Classificando imagem: {caminho_imagem}")
+    if 'Não há anexo' in caminho_imagem:
+        print('Não há anexo, logo não será processada')
+        return None, None
     imagem = load_img(caminho_imagem, target_size=(180, 180))
     imagem = img_to_array(imagem)
     imagem = np.expand_dims(imagem, axis=0)
@@ -147,6 +150,7 @@ def classificar_imagem_com_ia(caminho_imagem,
 
 def processar_nova_imagem(caminho_imagem, modelo, email, whats_cliente,
                           periodo):
+    print('processando nova imagem')
     classe, confianca = classificar_imagem_com_ia(caminho_imagem, modelo,
                                                   email, whats_cliente,
                                                   periodo)
@@ -182,11 +186,7 @@ def processar_nova_imagem(caminho_imagem, modelo, email, whats_cliente,
         print(
             f"Imagem {os.path.basename(caminho_imagem)} atualizada com sucesso."
         )
-def retrofeedback():
-    from tensorflow.keras.models import load_img, img_to_array
-    model = load_model(model_path);
-    model.
-    pass
+
 
 # Carregar ou treinar o modelo
 modelo = carregar_ou_treinar_modelo()

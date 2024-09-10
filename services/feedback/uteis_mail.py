@@ -41,7 +41,7 @@ def get_image_id_by_date(date):
 
 @cls.update
 def update_image_by_id(id):
-  query = f"update tbl_imagens set status = 'processada' where id_imagem = '{id}'"
+  query = f"update tbl_imagens set status = 'processada' where id_imagem = {id}"
   cursor.execute(query)
 
 

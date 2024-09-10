@@ -2,8 +2,8 @@ import requests
 
 import requests
 
-url_send = 'https://efea37cf-0d56-4e3d-9823-0d7598a15284-00-17uxzbltcwyyz.spock.replit.dev:8000/whats/send'  # URL da API
-url_get = 'https://efea37cf-0d56-4e3d-9823-0d7598a15284-00-17uxzbltcwyyz.spock.replit.dev:8000/whats'  # URL da API
+url_send = 'https://ba2add21-2f50-4d9e-84c9-1c06ee3cb5e3-00-1bm00jl761pt7.worf.replit.dev:8000/whats/send'  # URL da API
+url_get = 'https://ba2add21-2f50-4d9e-84c9-1c06ee3cb5e3-00-1bm00jl761pt7.worf.replit.dev:8000/whats'  # URL da API
 
 
 def postar(numero: str, mensagem: str, periodo: str):

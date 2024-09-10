@@ -153,7 +153,7 @@ async def classify_email():
                     # Obs: ainda em teste favor nn alterar por enquanto
                     result = apply_images(email)
                     path_str = result.get('path')
-                    status = result.get('status')
+                    status = 'a processar'
                     print(f"""
                     path_str: {path_str}
                     status : {status}
@@ -226,7 +226,8 @@ async def classify_email():
                             whats_msg = f"Alerta de segurança: Acesso cameras detectaram uma movimentação.\nCliente:    {email_cliente}\nCircuito: {end_ip}\nCamêra: {dispositivo}"
 
                             if whatsapp != None:
-                                postar(whatsapp, whats_msg, email['date'])
+                                # postar(whatsapp, whats_msg, email['date'])
+                                print('whatsapp sendo enviado...')
                             if email_cliente != None:
                                 enviar_alerta_email(
                                     email_cliente,

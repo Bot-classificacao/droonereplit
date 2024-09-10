@@ -139,12 +139,14 @@ async def generate_token(user):
                 random.choice(string.ascii_uppercase + string.digits)
                 for _ in range(5))
             cur.execute(
-                'INSERT INTO tbl_tokens (email, token) VALUES (%s, %s, 0)',
-                (user.email, token))
+                'INSERT INTO tbl_tokens (email, token, usado) VALUES (%s, %s, %s)',
+                (user.email, token, 0))
             print("# Token salvo no BD")
             cnx.commit()
             desconectar(cnx, cur)
             return token
+        else:
+            print("Erro ao gerar token, email não encontrado")
 
     except Exception as e:
         raise HTTPException(status_code=500,
@@ -158,16 +160,17 @@ async def validate_token(user):
         cnx, cur = conectar()
 
         print("=== VALIDATE TOKEN")
-        cur.execute('SELECT fk_email FROM tbl_users INNER JOIN tbl_usermails ON tbl_user.fk_email = tbl_usermails.id_email WHERE tbl_usermails.email = %s LIMIT 1',         (user.email, ))
+        print(f"EMAIL: {user.email}")
+        print(f"TOKEN: {user.token}")
+        cur.execute('SELECT fk_email FROM tbl_users INNER JOIN tbl_usermails ON tbl_users.fk_email = tbl_usermails.id_email WHERE tbl_usermails.email = %s LIMIT 1',         (user.email, ))
         id_email = cur.fetchone()
-        print(f"==== ID EMAIL: {id_email}")
+        print(f"==== ID EMAIL: {id_email[0]}")
         if id_email:
             cur.execute(
-                'SELECT * FROM tbl_tokens WHERE email = %s AND token = %s AND usado = 0 LIMIT 1;',
-                (user.email, user.token))
+                'SELECT * FROM tbl_tokens WHERE email = %s AND token = %s AND usado = 0 LIMIT 1', (user.email, user.token))
 
             is_valid = cur.fetchone()
-            print(f"==== IS VALID: {is_valid[0]}")
+            print(f"==== IS VALID: {is_valid[3]}")
 
             if is_valid:
                 cur.execute('UPDATE tbl_tokens SET usado = 1 WHERE email = %s',
@@ -175,12 +178,13 @@ async def validate_token(user):
 
                 cnx.commit()
 
-                return {'message': 'Sucesso. Token Válido!'}
-        desconectar(cnx, cur)
+        else:
+            return {'message': 'E-mail não encontrado'}
     except Exception as e:
         raise HTTPException(status_code=500,
                             detail=f"Erro ao validar o token: {str(e)}") from e
-
+    finally:
+        desconectar(cnx, cur)
 
 #  Validate Token Function
 async def forgot_pass(user):
@@ -189,19 +193,20 @@ async def forgot_pass(user):
     try:
         cnx, cur = conectar()
 
-        cur.execute('SELECT * FROM tbl_users WHERE email = %s', (user.email, ))
+        cur.execute('SELECT * FROM tbl_users INNER JOIN tbl_usermails ON tbl_users.fk_email = tbl_usermails.id_email WHERE tbl_usermails.email = %s', (user.email, ))
 
-        if not cur.fetchone():
+        db_user = cur.fetchone()
+        if not db_user:
             raise HTTPException(status_code=400, detail="Email não existe.")
 
-        cur.execute('UPDATE tbl_users SET password = %s WHERE email = %s', (
+        cur.execute('UPDATE tbl_users SET senha = %s WHERE id_user = %s', (
             hashed_password,
-            user.email,
+            str(db_user[0])
         ))
         cnx.commit()
 
-        cur.execute('SELECT * FROM tbl_users WHERE email = %s', (user.email, ))
-        db_user = cur.fetchone()
+        #cur.execute('SELECT * FROM tbl_users INNER JOIN tbl_usermails ON tbl_users.fk_email = tbl_usermails.id_email WHERE tbl_usermails.email = %s', (user.email, ))
+        #db_user = cur.fetchone()
         cur.close()
         desconectar(cnx, cur)
         if db_user:
